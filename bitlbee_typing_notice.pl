@@ -14,6 +14,10 @@
 #
 # Changelog:
 #
+# 2011-03-28 (version 1.7.2)
+# * Added 'bitlbee_typing_timeout' setting to make the period after which the
+#   typing notice disappears configurable.
+#
 # 2010-08-09 (version 1.7.1)
 # * Multiple control channels supported by checking chanmodes
 #
@@ -83,7 +87,7 @@ use Data::Dumper;
 
 use vars qw($VERSION %IRSSI);
 
-$VERSION = '1.7.1';
+$VERSION = '1.7.2';
 %IRSSI = (
 	authors     => 'Tijmen "timing" Ruizendaal, Matt Sparks',
 	contact     => 'tijmen.ruizendaal@gmail.com, ms+irssi@quadpoint.org',
@@ -130,11 +134,11 @@ Irssi::signal_add_last('channel sync' => sub {
 	}
 });
 
-# How often to check if we are typing, or on msn,
-# how long to keep the typing notice up, or check
-# if the other user is still typing...
+# How often to send typing notice while we are typing.
 my $KEEP_TYPING_TIMEOUT = 1;
-my $STOP_TYPING_TIMEOUT = 7;
+
+# Delay (in seconds) before sending a notice that we stopped typing.
+my $STALE_TIMEOUT = 7;
 
 my %timer_tag;
 
@@ -161,9 +165,13 @@ sub event_ctcp_msg {
 			    and $address !~ /\@login\.icq\.com/ ){
 				Irssi::timeout_remove($tag{$from});
 				delete($tag{$from});
-				$tag{$from}=Irssi::timeout_add_once($STOP_TYPING_TIMEOUT * 1000,
-				                                    "unset_typing",
-				                                    $from);
+
+				# Some protocols (e.g., MSN) don't report not-typing status, so we must
+				# remove the notice manually.
+				my $timeout = Irssi::settings_get_int('bitlbee_typing_timeout');
+				$tag{$from} = Irssi::timeout_add_once($timeout * 1000,
+				                                      'unset_typing',
+				                                      $from);
 			}
 			redraw($from);
 		} elsif( $type == 2 ){
@@ -312,7 +320,7 @@ sub send_typing {
 
 		### create new timer
 		$timer_tag{$nick} =
-		  Irssi::timeout_add_once($STOP_TYPING_TIMEOUT * 1000,
+		  Irssi::timeout_add_once($STALE_TIMEOUT * 1000,
 		                          'out_empty',
 		                          ["$nick", $bitlbee_server->{tag}]);
 	}
@@ -335,6 +343,12 @@ Irssi::command_bind('db_typing', 'db_typing');
 
 Irssi::settings_add_bool("bitlbee","bitlbee_send_typing", 1);
 Irssi::settings_add_bool("bitlbee","bitlbee_typing_allwin", 0);
+
+# How many seconds after which we remove the typing notice. This should
+# probably set low if you use MSN, which does not (or did not) send TYPING 0
+# notices. For other protocols that report not-typing status updates, set this
+# high.
+Irssi::settings_add_int('bitlbee', 'bitlbee_typing_timeout', 7);
 
 Irssi::signal_add("ctcp msg", "event_ctcp_msg");
 Irssi::signal_add("message private", "event_msg");
