@@ -17,6 +17,7 @@
 # 2011-03-28 (version 1.7.2)
 # * Added 'bitlbee_typing_timeout' setting to make the period after which the
 #   typing notice disappears configurable.
+# * Some redrawing fixes.
 #
 # 2010-08-09 (version 1.7.1)
 # * Multiple control channels supported by checking chanmodes
@@ -144,7 +145,6 @@ my %timer_tag;
 
 my %typing;
 my %tag;
-my $line;
 my %out_typing;
 my $lastkey;
 my $keylog_active = 1;
@@ -195,7 +195,7 @@ sub stale_typing {
 }
 
 sub redraw {
-	my($from)=@_;
+	my($from) = @_;
 	my $window = Irssi::active_win();
 	my $name = $window->get_active_name();
 
@@ -204,8 +204,18 @@ sub redraw {
 	if( $from eq $name
 	    || (grep $_ eq $name, @control_channels)
 	    || Irssi::settings_get_bool("bitlbee_typing_allwin") ){
-		Irssi::statusbar_items_redraw('typing_notice');
+		_redraw($from);
+
+		# Call _redraw again shortly. Redrawing twice helps get rid of drawing
+		# artifacts. The timer is needed because two repeated redraw calls seems to
+		# be ineffective.
+		Irssi::timeout_add_once(10, '_redraw', $from);
 	}
+}
+
+sub _redraw {
+	my($from) = @_;
+	Irssi::statusbar_items_redraw('typing_notice');
 }
 
 sub event_msg {
@@ -225,28 +235,37 @@ sub typing_notice {
 	my ($item, $get_size_only) = @_;
 	my $window = Irssi::active_win();
 	my $channel = $window->get_active_name();
+	my $line;
 
+	# For typing notices in the active window.
 	if (exists($typing{$channel})) {
-		my $append=$typing{$channel}==2 ? " (stale)" : "";
-		$item->default_handler($get_size_only, "{sb typing$append}", 0, 1);
+		$line = ($typing{$channel} == 1) ? "typing" : "typing (stale)";
 	} else {
-		$item->default_handler($get_size_only, "", 0, 1);
+		$line = "";
 		Irssi::timeout_remove($tag{$channel});
 		delete($tag{$channel});
 	}
-	# we check for correct windows again, because the statusbar item is redrawn
-	# after window change too.
-	if( (grep $_ eq $channel, @control_channels)
+
+	# For global typing notices, or notices when the active window is a control
+	# channel.
+	if ((grep $_ eq $channel, @control_channels)
 	    || Irssi::settings_get_bool("bitlbee_typing_allwin")) {
+		$line = "";
 		foreach my $key (keys(%typing)) {
-			$line .= " ".$key;
-			if ($typing{$key}==2) { $line .= " (stale)"; }
+			if ($typing{$key} == 1) {
+				$line .= "$key ";
+			} else {
+				$line .= "$key (stale) ";
+			}
 		}
 		if ($line ne "") {
-			$item->default_handler($get_size_only, "{sb typing:$line}", 0, 1);
-			$line = "";
+			$line = "typing: $line";
+			$line = substr($line, 0, -1);
 		}
 	}
+
+	my $sb_line = ($line ne "") ? "{sb $line}" : "{}";
+	$item->default_handler($get_size_only, $sb_line, 0, 1);
 }
 
 sub window_change {
