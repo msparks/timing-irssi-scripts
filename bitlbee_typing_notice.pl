@@ -18,6 +18,7 @@
 # * Added 'bitlbee_typing_timeout' setting to make the period after which the
 #   typing notice disappears configurable.
 # * Some redrawing fixes.
+# * Added color support (/set bitlbee_typing_colors ON).
 #
 # 2010-08-09 (version 1.7.1)
 # * Multiple control channels supported by checking chanmodes
@@ -237,9 +238,19 @@ sub typing_notice {
 	my $channel = $window->get_active_name();
 	my $line;
 
+	my $use_colors = Irssi::settings_get_bool('bitlbee_typing_colors');
+	my $active = Irssi::settings_get_str('bitlbee_typing_active_color');
+	my $stale = Irssi::settings_get_str('bitlbee_typing_stale_color');
+	my $normal = '%n';
+
 	# For typing notices in the active window.
 	if (exists($typing{$channel})) {
-		$line = ($typing{$channel} == 1) ? "typing" : "typing (stale)";
+		if ($use_colors) {
+			$line = ($typing{$channel} == 1) ?
+			    "$active$channel$normal" : "$stale$channel$normal";
+		} else {
+			$line = ($typing{$channel} == 1) ? "typing" : "typing (stale)";
+		}
 	} else {
 		$line = "";
 		Irssi::timeout_remove($tag{$channel});
@@ -253,13 +264,13 @@ sub typing_notice {
 		$line = "";
 		foreach my $key (keys(%typing)) {
 			if ($typing{$key} == 1) {
-				$line .= "$key ";
+				$line .= ($use_colors) ? "$active$key$normal " : "$key ";
 			} else {
-				$line .= "$key (stale) ";
+				$line .= ($use_colors) ? "$stale$key$normal" : "$key (stale) ";
 			}
 		}
 		if ($line ne "") {
-			$line = "typing: $line";
+			$line = ($use_colors) ? $line : "typing: $line";
 			$line = substr($line, 0, -1);
 		}
 	}
@@ -366,6 +377,11 @@ Irssi::settings_add_bool("bitlbee","bitlbee_typing_allwin", 0);
 # notices. For other protocols that report not-typing status updates, set this
 # high.
 Irssi::settings_add_int('bitlbee', 'bitlbee_typing_timeout', 7);
+
+# Enable/disable color notices.
+Irssi::settings_add_bool('bitlbee', 'bitlbee_typing_colors', 0);
+Irssi::settings_add_str('bitlbee', 'bitlbee_typing_active_color', '%G');
+Irssi::settings_add_str('bitlbee', 'bitlbee_typing_stale_color', '%y');
 
 Irssi::signal_add("ctcp msg", "event_ctcp_msg");
 Irssi::signal_add("message private", "event_msg");
