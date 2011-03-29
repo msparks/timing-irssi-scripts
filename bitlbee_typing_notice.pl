@@ -181,11 +181,11 @@ sub event_ctcp_msg {
 }
 
 sub unset_typing {
-	my($from,$no_redraw)=@_;
+	my ($from) = @_;
 	delete $typing{$from} if $typing{$from};
 	Irssi::timeout_remove($tag{$from});
 	delete($tag{$from});
-	redraw($from) if !$no_redraw;
+	redraw($from);
 }
 
 sub stale_typing {
@@ -209,11 +209,9 @@ sub redraw {
 }
 
 sub event_msg {
-	my ($server,$data,$from,$address,$target) = @_;
+	my ($server, $data, $from, $address, $target) = @_;
 	return if $server->{tag} ne $bitlbee_server->{tag};
-	my $channel=Irssi::active_win()->get_active_name();
-	unset_typing $from, "no redraw";
-	unset_typing $channel;
+	unset_typing $from;
 }
 
 sub event_quit {
